@@ -213,6 +213,8 @@ The MCP server manages this through `api-updater.ts`:
 
 ### Security
 
+**Minimal trust principle:** Everything arriving from the network — API JSON from the CDN, documentation strings, schema fields — is treated as untrusted data, never as instructions. The mechanisms below enforce this boundary at each entry point.
+
 **Input sanitization (`sanitizer.ts`):**
 All documentation strings from the API JSON pass through a sanitizer before being returned to Claude. Strips patterns that could constitute prompt injection (instruction-like phrasing, system-prompt-style markers). Applied to all `Documentation.Summary`, `Documentation.Remarks`, and member doc comments.
 
