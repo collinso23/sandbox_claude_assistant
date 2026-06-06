@@ -23,6 +23,13 @@ function writeTempRaw(content: string): string {
   return p;
 }
 
+function writeTempJsonNamed(filename: string, content: unknown): string {
+  const p = path.join(os.tmpdir(), filename);
+  fs.writeFileSync(p, JSON.stringify(content));
+  tmpFiles.push(p);
+  return p;
+}
+
 afterAll(() => {
   for (const f of tmpFiles) {
     try { fs.unlinkSync(f); } catch {}
@@ -80,6 +87,37 @@ describe("LruCache", () => {
     c.set("b", 2);
     expect(c.size).toBe(2);
   });
+
+  it("set on existing key updates the stored value without growing the cache", () => {
+    const c = new LruCache<string, number>(2);
+    c.set("a", 1);
+    c.set("a", 99);
+    expect(c.get("a")).toBe(99);
+    expect(c.size).toBe(1);
+  });
+
+  it("set on existing key promotes it to survive the next eviction", () => {
+    const c = new LruCache<string, number>(2);
+    c.set("a", 1);
+    c.set("b", 2);
+    c.set("a", 1); // re-set a → b becomes oldest
+    c.set("c", 3); // b should be evicted
+    expect(c.has("b")).toBe(false);
+    expect(c.has("a")).toBe(true);
+    expect(c.has("c")).toBe(true);
+  });
+
+  it("maxSize=1 evicts on every new set", () => {
+    const c = new LruCache<string, number>(1);
+    c.set("a", 1);
+    c.set("b", 2);
+    expect(c.has("a")).toBe(false);
+    expect(c.has("b")).toBe(true);
+    c.set("c", 3);
+    expect(c.has("b")).toBe(false);
+    expect(c.has("c")).toBe(true);
+    expect(c.size).toBe(1);
+  });
 });
 
 // ── ApiLoader — load and structure ────────────────────────────────────────
@@ -129,6 +167,22 @@ describe("ApiLoader — load and structure", () => {
     expect(types).toHaveLength(1);
     expect(types[0].FullName).toBe("Sandbox.Component");
   });
+
+  it("getByName returns empty array for unknown name", () => {
+    expect(loader.getByName("NoSuchType")).toEqual([]);
+  });
+
+  it("apiDate is undefined when filename has no timestamp pattern", () => {
+    expect(loader.apiDate).toBeUndefined();
+  });
+
+  it("apiDate is extracted from a timestamped filename", async () => {
+    const minimalType = { Name: "X", FullName: "X.X", Namespace: "X", Group: "class", Assembly: "x", IsPublic: true, DocId: "T:X.X" };
+    const p = writeTempJsonNamed("2026-06-05-18-09-57.zip.json", { Types: [minimalType] });
+    const l = new ApiLoader();
+    await l.load(p);
+    expect(l.apiDate).toBe("2026-06-05-18-09-57");
+  });
 });
 
 // ── ApiLoader — search gate ───────────────────────────────────────────────
@@ -155,6 +209,30 @@ describe("ApiLoader — search gate", () => {
     const results = loader.search("Sandbox.UI.WorldPanel");
     expect(results).toHaveLength(1);
     expect(results[0].Name).toBe("WorldPanel");
+  });
+
+  it("returns [] before load() is called", () => {
+    expect(new ApiLoader().search("Component")).toEqual([]);
+  });
+
+  it('search("Sandbox.Physics") returns PhysicsBody via dot-AND match', () => {
+    const results = loader.search("Sandbox.Physics");
+    expect(results).toHaveLength(1);
+    expect(results[0].FullName).toBe("Sandbox.Physics.PhysicsBody");
+  });
+
+  it('search("WorldPanel", "Sandbox.UI") passes namespace filter', () => {
+    const results = loader.search("WorldPanel", "Sandbox.UI");
+    expect(results).toHaveLength(1);
+    expect(results[0].FullName).toBe("Sandbox.UI.WorldPanel");
+  });
+
+  it('search("WorldPanel", "Sandbox") eliminates result that lives in Sandbox.UI', () => {
+    expect(loader.search("WorldPanel", "Sandbox")).toEqual([]);
+  });
+
+  it('search("NoSuchType") returns []', () => {
+    expect(loader.search("NoSuchType")).toEqual([]);
   });
 });
 
@@ -208,6 +286,11 @@ describe("ApiLoader — validation", () => {
 
   it("throws on invalid JSON", async () => {
     const p = writeTempRaw("this is not json { broken");
+    await expect(new ApiLoader().load(p)).rejects.toThrow();
+  });
+
+  it("throws when root is an array instead of an object", async () => {
+    const p = writeTempJson([]);
     await expect(new ApiLoader().load(p)).rejects.toThrow();
   });
 });
