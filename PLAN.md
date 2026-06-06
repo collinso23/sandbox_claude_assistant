@@ -492,12 +492,27 @@ Checkboxes: "Describes engine behavior (not game-specific code)?", "CI passes?",
 
 **Rule: one component at a time.** Write one file or tool, verify it works, get confirmation, commit, then proceed.
 
-**Step gate format:**
-1. Write the single file or tool
-2. Test it (`npm test`, load in Claude, run script, inspect output)
-3. Confirm behavior matches intent in this plan
-4. Commit
-5. Proceed to next step only
+**Step gate — two parts:**
+
+**Part 1 — Feature gate** (defined per step in Build Order):
+The observable behaviors that must work for that specific file.
+
+**Part 2 — Methodology gate** (applied to every step before marking complete):
+Ask — not tick — each of the following against the file just written:
+
+| Category | Key question |
+|---|---|
+| Test Coverage | Every public method has: happy path, guard clauses hit, both branch sides, optional params varied, boundary values, error/rejection paths, and specific (not just existence) assertions |
+| Security | Network/external data validated at the boundary; no path traversal; errors never embed untrusted content; no eval/dynamic execution |
+| Algorithmic Complexity | Frequent lookups are O(1) Maps; expensive work is load-time not query-time; no hidden O(n²) patterns |
+| Async Correctness | Every async path resolves or rejects; no hanging promises; shared state never exposed in a partial/in-progress form |
+| Robustness | Optional dependencies degrade gracefully; errors name what failed, what was expected, and what was received; safe return types (array not undefined) |
+| Interface Minimalism | Only needed exports; private helpers unexported; return types as narrow as possible; no method that does two distinct things |
+| Boundary / Edge Cases | Empty string/array/zero, single-element collections, missing optional fields, unicode, values at structure limits |
+| Observability | Errors identify source and bad value; state is inspectable for tests; debug mode logs useful metadata |
+| Resource Lifecycle | Memory is bounded; file/network handles closed; test temp files cleaned up; background timers injectable not auto-started |
+
+The methodology gate is a prompt for discussion, not a mandatory checkbox list. Use it to ask: "which of these did I not think about?" The full 81-point reference lives in conversation history and can be used for post-implementation audits.
 
 ---
 
@@ -516,34 +531,49 @@ Each item is one step. Do not proceed until the current step passes its gate.
 5. **Write `api-loader.ts` + tests** — streaming index, inverted index, LRU cache. Gate: fixture loads correctly; inverted index resolves `"WorldPanel"` to `Sandbox.UI.WorldPanel`; LRU cache verified.
 
 6. **Write `api-updater.ts` + tests** — CDN timestamp comparison, local cache management. Gate: mocked newer CDN timestamp returns `updateAvailable: true`; offline mode bypasses all CDN calls.
+   Focus: Async Correctness (timeout on CDN requests; no hanging promises on network failure), Resource Lifecycle (stream response to disk; don't hold body in memory), Security (validate CDN response structure before reading fields; path traversal check on cache dir), Robustness (offline mode bypasses all network; unreachable CDN produces a named error with the URL), Test Coverage (offline path; newer/same/older timestamp cases; missing cache directory)
 
 7. **Write `project-gotchas.ts` + tests** — loads `.claude/gotchas.json` from project root. Gate: entries loaded with `source: "project"`; absent file returns empty array without error.
+   Focus: Robustness (missing file → `[]`, not crash; malformed JSON → clear error naming the file), Boundary (empty array, file with zero entries, file with one entry), Security (project root is caller-supplied — validate before use; no path traversal), Test Coverage (file present, file absent, file malformed, source tag = `"project"`)
 
 8. **Implement `get_api_info` tool + tests**. Gate: correct metadata from fixture; `degraded: true` when no API JSON; `indexReady` reflects build state.
+   Focus: Observability (`indexReady`, `typeCount`, `apiDate`, `updateAvailable`, `degraded` all surfaced and accurate), Robustness (`degraded: true` when no API JSON — clean response, not crash), Test Coverage (`indexReady` true/false, `degraded` true/false, `apiDate` present/absent)
 
 9. **Write `data/gotchas.ts`** with all platform seed entries. Gate: all entries satisfy `Gotcha` interface; structural CI check passes; `apiTypes` entries exist in fixture.
+   Focus: Boundary (all 15 seed entries satisfy the `Gotcha` interface; every `apiTypes` value exists in the fixture), Security (no entry references casino-specific or project-specific class names — platform behavior only), Interface (required fields enforced by TypeScript types, not runtime checks)
 
 10. **Implement `search_gotchas` tool + tests**. Gate: broadcast and proxy entries found; tag-first filtering verified; platform + project sources merged correctly.
+    Focus: Test Coverage (platform-only results, project-only results, merged results, tag filter hit, tag filter miss, empty result, source tag preserved on each entry), Algorithmic Complexity (tag filter reduces the candidate set before text search, not after), Interface (source tagging is accurate; `"platform"` vs `"project"` is never mixed)
 
 11. **Implement `search_sbox_api` tool + tests**. Gate: `"WorldPanel"` returns `Sandbox.UI.WorldPanel` first; `"Camera.Main"` returns zero results; ranking verified.
+    Focus: Test Coverage (`WorldPanel` first, `Camera.Main` empty, namespace filter pass/block, before `indexReady`), Security (query string bounds-checked — max length, no null bytes — before reaching loader), Observability (result count and match tier visible in debug mode), Interface (thin wrapper — all search logic lives in ApiLoader, none duplicated here)
 
 12. **Implement `get_sbox_type` tool + tests** (normal + verbose). Gate: normal mode truncates docs; verbose returns full object; disambiguation works; sanitizer applied.
+    Focus: Security (sanitizer applied to every doc field before return — explicitly asserted in tests, not assumed), Test Coverage (normal truncates, verbose full, disambiguation returns multiple, sanitizer strips injection, type not found), Boundary (type with no docs; type with no Methods/Properties/Fields)
 
 13. **Implement `list_namespaces` tool + tests**. Gate: all fixture namespaces returned with correct type counts.
+    Focus: Algorithmic Complexity (`getNamespaces()` result is cached after first call — not recomputed per tool invocation), Test Coverage (correct counts per namespace, degraded mode returns empty map not crash)
 
 14. **Wire `index.ts`** — server init, tool registration, startup sequence, debug mode. Gate: server starts; `--debug` creates log file; degraded mode behaves correctly.
+    Focus: Async Correctness (startup sequence is ordered; `indexReady` is only set true after full index build, never mid-load), Resource Lifecycle (debug log file handle closed on shutdown; no lingering timers), Robustness (degraded mode starts cleanly; tool calls before `indexReady` return safe well-formed responses), Observability (startup log states file loaded, type count, index build time)
 
 15. **Write `generate-api-reference.ts`** script. Gate: valid Markdown output with API date header; deterministic.
+    Focus: Resource Lifecycle (write to temp file then atomic rename — output file is never in a truncated/partial state), Boundary (types with no docs render cleanly; empty namespace is skipped gracefully), Interface (output is deterministic — types sorted by FullName — same input always produces identical output)
 
 16. **Write `CLAUDE.md.template`**. Gate: fresh session orients correctly; avoids Unity APIs; asks verbose/normal before building.
+    Focus: Boundary (placeholder substitution handles special characters in user-supplied project names), Security (substitution does not allow injection through placeholder values), Test Coverage (behavioral — load in a Claude session and verify the specific responses named in the gate)
 
 17. **Write `SYSTEM_PROMPT.md.template`**. Gate: Claude writes IsProxy guard, [Sync] property, Rpc.Host→Rpc.Broadcast flow correctly unprompted.
+    Focus: same as step 16
 
 18. **Write `NETWORKING_PROMPT.md.template`**. Gate: Claude describes generic pickup/carry ownership transfer pattern without casino class names.
+    Focus: same as step 16
 
 19. **Write `UI_PROMPT.md.template`**. Gate: Claude uses `BuildHash()` not `StateHasChanged()`; reads [Sync] directly in Razor; no code-mounted panels.
+    Focus: same as step 16
 
 20. **Write remaining templates** one at a time — `DESIGN`, `MAP`, `SESSION_START`, `COMMANDS`. Gate per template: load and verify Claude answers what it's supposed to answer.
+    Focus: same as step 16
 
 21. **Write `install.sh` / `install.ps1`**. Gate: idempotent; `npx` invocation; manifest written.
 
