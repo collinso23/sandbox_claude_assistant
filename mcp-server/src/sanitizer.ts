@@ -6,10 +6,10 @@ const ZERO_WIDTH = /[​-‍﻿­⁠]/g;
 
 const INJECTION_PATTERNS: RegExp[] = [
   // Instruction overrides
-  /ignore\s+(all\s+|previous\s+|prior\s+|your\s+)?(instructions?|prompts?|context|guidelines?)/gi,
-  /disregard\s+(all\s+|previous\s+|prior\s+|your\s+)?(instructions?|safety|guidelines?|rules?|system\s+prompt)/gi,
+  /ignore\s+(all\s+|previous\s+|prior\s+|your\s+)*(instructions?|prompts?|context|guidelines?)/gi,
+  /disregard\s+(all\s+|previous\s+|prior\s+|your\s+)*(instructions?|safety|guidelines?|rules?|system\s+prompt)/gi,
   /forget\s+(everything|all)\s+(above|prior|previous)/gi,
-  /override\s+(previous\s+)?instructions?/gi,
+  /override\s+(all\s+|previous\s+|prior\s+)*instructions?/gi,
   /your\s+new\s+(instructions?|persona|role|task)\s+(is|are)/gi,
   /from\s+now\s+on\s+you\s+(are|will|must)/gi,
 
