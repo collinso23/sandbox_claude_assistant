@@ -116,6 +116,35 @@ describe("searchGotchas — mixed tag + text", () => {
   });
 });
 
+// ── Ranking ────────────────────────────────────────────────────────────────
+
+describe("searchGotchas — ranking", () => {
+  it("entry matching in more fields ranks above entry matching in fewer fields", () => {
+    const highMatch: Gotcha = {
+      ...PROJECT_GOTCHA,
+      id: "high-match",
+      title: "virtual method rpc issue",
+      wrongReason: "virtual method breaks dispatch",
+    };
+    const lowMatch: Gotcha = {
+      ...PROJECT_GOTCHA,
+      id: "low-match",
+      title: "virtual method warning",
+      wrongReason: "unrelated reason",
+    };
+    // "virtual" is not a tag → goes to textTokens → sort comparator is exercised
+    // highMatch: title(+3) + wrongReason(+1) = 4
+    // lowMatch:  title(+3)                   = 3
+    const results = searchGotchas(
+      { platformGotchas: [lowMatch, highMatch], projectGotchas: [] },
+      "virtual"
+    );
+    expect(results).toHaveLength(2);
+    expect(results[0].id).toBe("high-match");
+    expect(results[1].id).toBe("low-match");
+  });
+});
+
 // ── Source preservation ────────────────────────────────────────────────────
 
 describe("searchGotchas — source preservation", () => {
