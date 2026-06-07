@@ -119,6 +119,14 @@ describe("searchSboxApi — normal mode (default)", () => {
     expect(results[0].Documentation?.Summary).toBeDefined();
     expect(typeof results[0].Documentation?.Summary).toBe("string");
   });
+
+  it("NetworkMode Fields are present without Documentation in normal mode", () => {
+    const results = searchSboxApi({ loader }, "NetworkMode");
+    const nm = results.find((r) => r.FullName === "Sandbox.NetworkMode");
+    expect(nm).toBeDefined();
+    expect(nm!.Fields?.length).toBeGreaterThan(0);
+    expect(nm!.Fields![0].Documentation).toBeUndefined();
+  });
 });
 
 // ── Verbose mode ──────────────────────────────────────────────────────────
@@ -156,5 +164,13 @@ describe("searchSboxApi — verbose mode", () => {
     const comp = results.find((r) => r.FullName === "Sandbox.Component");
     expect(comp).toBeDefined();
     expect(comp!.Methods?.some((m) => m.Documentation !== undefined)).toBe(true);
+  });
+
+  it("NetworkMode verbose result includes Field Documentation", () => {
+    const results = searchSboxApi({ loader }, "NetworkMode", { verbose: true });
+    const nm = results.find((r) => r.FullName === "Sandbox.NetworkMode");
+    expect(nm).toBeDefined();
+    expect(nm!.Fields?.length).toBeGreaterThan(0);
+    expect(nm!.Fields![0].Documentation?.Summary).toBeDefined();
   });
 });
