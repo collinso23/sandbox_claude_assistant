@@ -516,6 +516,20 @@ Ask — not tick — each of the following against the file just written:
 
 The methodology gate is a prompt for discussion, not a mandatory checkbox list. Use it to ask: "which of these did I not think about?" The full 81-point reference lives in conversation history and can be used for post-implementation audits.
 
+**Coverage verification (required before every commit):**
+Run `npm test -- --coverage` and read the branch/function report. Coverage is not the goal — uncovered branches are test cases you forgot to write. A step is not complete until every branch is reachable.
+
+**Three coverage gaps that appear repeatedly — check these explicitly:**
+
+1. **Sort comparator dead code.** If every test returns ≤1 result, `.sort((a,b) => ...)` is never invoked. For any ranking/sort implementation, write a synthetic test with exactly two controlled inputs of known different scores and assert which comes first.
+
+2. **Optional array: absent vs. present-but-empty.** `!field` is true on both `undefined` and `[]`. When an optional array field has a non-empty invariant (e.g. `apiTypes`), write two separate tests: one where the field is absent (`undefined`) and one where it is present but empty (`[]`). Both states must be handled correctly.
+
+3. **All parallel member arrays.** When a data shape has multiple parallel member arrays (e.g. `Methods`, `Properties`, `Fields`, `Constructors` on `SboxType`), test each one independently. Testing only Methods and Properties leaves Fields and Constructors as dead code.
+
+**External assumptions rule:**
+Any URL, file path, or network contract that the code depends on must be either (a) tested against a real endpoint before encoding, or (b) explicitly marked in the step's plan as "assumption: verify manually before step N." The CDN discovery mechanism (`sbox.game/api/schema` + crawler UA) is the archetype of an assumption that silently shaped an entire module before being tested.
+
 ---
 
 ## Build Order
@@ -550,20 +564,20 @@ Each item is one step. Do not proceed until the current step passes its gate.
 11. **Implement `search_sbox_api` tool + tests**. Gate: `"WorldPanel"` returns `Sandbox.UI.WorldPanel` first; `"Camera.Main"` returns zero results; ranking verified.
     Focus: Test Coverage (`WorldPanel` first, `Camera.Main` empty, namespace filter pass/block, before `indexReady`), Security (query string bounds-checked — max length, no null bytes — before reaching loader), Observability (result count and match tier visible in debug mode), Interface (thin wrapper — all search logic lives in ApiLoader, none duplicated here)
 
-12. **Implement `get_sbox_type` tool + tests** (normal + verbose). Gate: normal mode truncates docs; verbose returns full object; disambiguation works; sanitizer applied.
-    Focus: Security (sanitizer applied to every doc field before return — explicitly asserted in tests, not assumed), Test Coverage (normal truncates, verbose full, disambiguation returns multiple, sanitizer strips injection, type not found), Boundary (type with no docs; type with no Methods/Properties/Fields)
+12. **Implement `get_sbox_type` tool + tests** (normal + verbose). Gate: normal mode strips Remarks and member docs; verbose returns full sanitized object; disambiguation returns multiple results with note; sanitizer applied; type not found returns undefined gracefully.
+    Focus: Security (sanitizer applied to every doc field before return — explicitly asserted in tests, not assumed from step 11 tests), Test Coverage (all four member arrays — Methods, Properties, Fields, Constructors — tested in both normal and verbose modes; both "no docs" and "injection in docs" cases asserted), Boundary (type with no Documentation; type with no members; type not found)
 
-13. **Implement `list_namespaces` tool + tests**. Gate: all fixture namespaces returned with correct type counts.
-    Focus: Algorithmic Complexity (`getNamespaces()` result is cached after first call — not recomputed per tool invocation), Test Coverage (correct counts per namespace, degraded mode returns empty map not crash)
+13. **Implement `list_namespaces` tool + tests**. Gate: all fixture namespaces returned with correct type counts; degraded mode returns empty array.
+    Focus: Algorithmic Complexity (`getNamespaces()` result is used directly — not recomputed per invocation), Test Coverage (correct counts per namespace; degraded mode returns `[]` not crash; verify all 5 fixture namespaces present), Coverage (call the tool twice; confirm result is identical — caching path exercised)
 
 14. **Wire `index.ts`** — server init, tool registration, startup sequence, debug mode. Gate: server starts; `--debug` creates log file; degraded mode behaves correctly.
-    Focus: Async Correctness (startup sequence is ordered; `indexReady` is only set true after full index build, never mid-load), Resource Lifecycle (debug log file handle closed on shutdown; no lingering timers), Robustness (degraded mode starts cleanly; tool calls before `indexReady` return safe well-formed responses), Observability (startup log states file loaded, type count, index build time)
+    Focus: Async Correctness (startup sequence is ordered; `indexReady` is only set true after full index build, never mid-load), Resource Lifecycle (debug log file handle closed on shutdown; no lingering timers), Robustness (degraded mode starts cleanly; tool calls before `indexReady` return safe well-formed responses), Observability (startup log states file loaded, type count, index build time), Coverage (each startup branch exercised: env var set/unset, cache present/absent, online/offline — each must reach the state it claims to set)
 
-15. **Write `generate-api-reference.ts`** script. Gate: valid Markdown output with API date header; deterministic.
-    Focus: Resource Lifecycle (write to temp file then atomic rename — output file is never in a truncated/partial state), Boundary (types with no docs render cleanly; empty namespace is skipped gracefully), Interface (output is deterministic — types sorted by FullName — same input always produces identical output)
+15. **Write `generate-api-reference.ts`** script. Gate: valid Markdown output with API date header; deterministic (same input → identical output on two runs).
+    Focus: Resource Lifecycle (write to temp file then atomic rename — output file is never in a truncated/partial state), Boundary (types with no docs render cleanly; empty namespace is skipped gracefully), Interface (output is deterministic — types sorted by FullName), Behavioral gate: run the script against the fixture and diff two consecutive outputs — they must be identical
 
 16. **Write `CLAUDE.md.template`**. Gate: fresh session orients correctly; avoids Unity APIs; asks verbose/normal before building.
-    Focus: Boundary (placeholder substitution handles special characters in user-supplied project names), Security (substitution does not allow injection through placeholder values), Test Coverage (behavioral — load in a Claude session and verify the specific responses named in the gate)
+    Focus: Security (placeholder substitution must not allow injection through user-supplied values), Boundary (placeholder values with special characters, spaces, or path separators), Behavioral gate: load in a Claude session; verify the specific responses named in the gate — `tsc --noEmit` alone is not sufficient
 
 17. **Write `SYSTEM_PROMPT.md.template`**. Gate: Claude writes IsProxy guard, [Sync] property, Rpc.Host→Rpc.Broadcast flow correctly unprompted.
     Focus: same as step 16
@@ -577,15 +591,17 @@ Each item is one step. Do not proceed until the current step passes its gate.
 20. **Write remaining templates** one at a time — `DESIGN`, `MAP`, `SESSION_START`, `COMMANDS`. Gate per template: load and verify Claude answers what it's supposed to answer.
     Focus: same as step 16
 
-21. **Write `install.sh` / `install.ps1`**. Gate: idempotent; `npx` invocation; manifest written.
+21. **Write `install.sh` / `install.ps1`**. Gate: idempotent (run twice — no duplicates, no errors on second run); `npx` invocation; manifest written; placeholder substitution verified.
+    Focus: Boundary (project root with spaces; already-installed state; partial install interrupted mid-run), Security (project root validated before file writes; no path traversal via placeholder values), Idempotency explicitly tested — run install, then run install again, verify manifest is not doubled and no files are overwritten with different content
 
-22. **Write `uninstall.sh` / `uninstall.ps1`**. Gate: manifest-listed files removed; customizations preserved; `.mcp.json` cleaned.
+22. **Write `uninstall.sh` / `uninstall.ps1`**. Gate: manifest-listed files removed; developer customizations below the marker are preserved; `.mcp.json` entry removed without touching other entries.
+    Focus: test uninstall *after* install (not standalone); test that customizations below `<!-- PROJECT CUSTOMIZATIONS -->` survive; test that a missing manifest is handled gracefully (not a crash)
 
-23. **Write community files** — `README.md`, `CONTRIBUTING.md`, `LICENSE`, `CHANGELOG.md`. Gate: unfamiliar developer can follow README to a working install.
+23. **Write community files** — `README.md`, `CONTRIBUTING.md`, `LICENSE`, `CHANGELOG.md`. Gate: unfamiliar developer can follow README to a working install without any prior knowledge of this repo.
 
-24. **Write GitHub scaffolding** — issue templates, PR template, `ci.yml`, `api-check.yml`. Gate: CI passes on test PR.
+24. **Write GitHub scaffolding** — issue templates, PR template, `ci.yml`, `api-check.yml`. Gate: CI passes on test PR; `api-check.yml` correctly detects a mock "new release" and opens an issue.
 
-25. **Write `CLAUDE.md`** for this repo. Gate: fresh session knows build commands, architecture, one-step rule.
+25. **Write `CLAUDE.md`** for this repo. Gate: fresh Claude session in this repo knows the build commands, current step, architecture, and one-step rule — without reading any prior conversation.
 
 ---
 

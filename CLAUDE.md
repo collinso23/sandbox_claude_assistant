@@ -29,9 +29,10 @@ The current build step is **step 12**: implement the `get_sbox_type` tool and it
 
 ```bash
 cd mcp-server
-npm install          # install deps
-npm test             # run Jest tests against api.fixture.json
-npm run build        # compile TypeScript → dist/
-npx . --update       # download latest API schema from CDN
-npx . --debug        # start server with debug logging
+npm install                  # install deps
+npm test                     # run Jest tests against api.fixture.json
+npm test -- --coverage       # run tests + branch coverage report (uncovered branches = missing tests)
+npm run build                # compile TypeScript → dist/
+npx . --update               # download latest API schema from CDN
+npx . --debug                # start server with debug logging
 ```
