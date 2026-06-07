@@ -222,7 +222,9 @@ section("api-loader — loading fixture");
   if (savedEnv !== undefined) process.env["SBOX_API_JSON"] = savedEnv;
   else delete process.env["SBOX_API_JSON"];
 
-  section("api-updater — checkForUpdate (offline, no network required)");
+  // Discovery: fetch sbox.game/api/schema with a crawler UA so Blazor pre-renders
+  // the full HTML containing the CDN download URL. Standard browser UAs get an empty JS shell.
+  section("api-updater — checkForUpdate (mocked schema page, no network required)");
   const offlineUpdater = new ApiUpdater({
     fetch: () => Promise.reject(new Error("Network unreachable")),
     cacheDir: cacheDir,
@@ -238,20 +240,25 @@ section("api-loader — loading fixture");
   });
   const http500Result = await http500Updater.checkForUpdate("2026-06-05-18-09-57");
   http500Result.updateAvailable === false
-    ? pass("CDN HTTP 500 → updateAvailable: false (no throw)")
+    ? pass("schema page HTTP 500 → updateAvailable: false (no throw)")
     : fail(`unexpected: ${JSON.stringify(http500Result)}`);
 
+  const newerHtml =
+    '<a href="https://cdn.sbox.game/releases/2026-06-10-12-00-00.zip.json">latest</a>' +
+    '<a href="https://cdn.sbox.game/releases/2026-06-05-18-09-57.zip.json">prev</a>';
   const cdnHasNewerUpdater = new ApiUpdater({
-    fetch: () => Promise.resolve(new Response("2026-06-10-12-00-00.zip.json 2026-06-05-18-09-57.zip.json")),
+    fetch: () => Promise.resolve(new Response(newerHtml)),
     cacheDir: cacheDir,
   });
   const newerResult = await cdnHasNewerUpdater.checkForUpdate("2026-06-05-18-09-57");
   newerResult.updateAvailable === true && newerResult.latestTimestamp === "2026-06-10-12-00-00"
-    ? pass(`newer CDN → updateAvailable: true, latestTimestamp: ${newerResult.latestTimestamp}`)
+    ? pass(`newer CDN URL in HTML → updateAvailable: true, latestTimestamp: ${newerResult.latestTimestamp}, downloadUrl: ${newerResult.downloadUrl}`)
     : fail(`unexpected: ${JSON.stringify(newerResult)}`);
 
+  const currentHtml =
+    '<a href="https://cdn.sbox.game/releases/2026-06-05-18-09-57.zip.json">download</a>';
   const alreadyCurrentUpdater = new ApiUpdater({
-    fetch: () => Promise.resolve(new Response("2026-06-05-18-09-57.zip.json")),
+    fetch: () => Promise.resolve(new Response(currentHtml)),
     cacheDir: cacheDir,
   });
   const currentResult = await alreadyCurrentUpdater.checkForUpdate("2026-06-05-18-09-57");
@@ -265,15 +272,16 @@ section("api-loader — loading fixture");
     ? pass("fetch timeout → updateAvailable: false, no throw (offline-first guarantee)")
     : fail(`unexpected: ${JSON.stringify(timeoutCheckResult)}`);
 
-  section("api-updater — downloadLatest (atomic write)");
+  section("api-updater — downloadLatest (atomic write, uses discovered URL directly)");
   const dlDir  = fs.mkdtempSync(path.join(os.tmpdir(), "sbox-demo-dl-"));
   const dlTs   = "2026-06-05-18-09-57";
+  const dlUrl  = `https://cdn.sbox.game/releases/${dlTs}.zip.json`;
   const dlBody = JSON.stringify({ Types: [{ Name: "X", FullName: "X.X", Namespace: "X", Group: "class", Assembly: "x", IsPublic: true, DocId: "T:X.X" }] });
   const dlUpdater = new ApiUpdater({
     cacheDir: dlDir,
     fetch: () => Promise.resolve(new Response(dlBody)),
   });
-  const finalPath = await dlUpdater.downloadLatest(dlTs);
+  const finalPath = await dlUpdater.downloadLatest(dlUrl);
   const expected  = path.join(dlDir, `${dlTs}.zip.json`);
   fs.existsSync(expected) && !fs.existsSync(`${expected}.tmp`) && finalPath === expected
     ? pass(`wrote ${path.basename(finalPath)}, no stale .tmp`)
@@ -284,7 +292,7 @@ section("api-loader — loading fixture");
     fetch: () => Promise.resolve(new Response("Not Found", { status: 404 })),
   });
   try {
-    await dlFailUpdater.downloadLatest(dlTs);
+    await dlFailUpdater.downloadLatest(dlUrl);
     fail("expected throw on HTTP 404 but did not throw");
   } catch (err) {
     String(err).includes("HTTP 404") && !fs.existsSync(path.join(dlDir, `${dlTs}.zip.json.tmp`))
@@ -294,12 +302,23 @@ section("api-loader — loading fixture");
 
   const dlTimeoutUpdater = new ApiUpdater({ cacheDir: dlDir, fetch: neverResolvingFetch(), timeoutMs: 50 });
   try {
-    await dlTimeoutUpdater.downloadLatest(dlTs);
+    await dlTimeoutUpdater.downloadLatest(dlUrl);
     fail("expected throw on timeout but did not throw");
   } catch (err) {
     !fs.existsSync(path.join(dlDir, `${dlTs}.zip.json.tmp`))
       ? pass(`fetch timeout → throws, no stale .tmp`)
       : fail(`stale .tmp left behind after timeout: ${err}`);
+  }
+
+  // Security: refuse downloads from unexpected domains
+  const dlBadUrlUpdater = new ApiUpdater({ cacheDir: dlDir });
+  try {
+    await dlBadUrlUpdater.downloadLatest(`https://evil.example.com/releases/${dlTs}.zip.json`);
+    fail("expected throw on foreign domain but did not throw");
+  } catch (err) {
+    String(err).includes("Refused download")
+      ? pass(`foreign domain → throws immediately with "Refused download" (no network call)`)
+      : fail(`unexpected error: ${err}`);
   }
 
   // ── project-gotchas demo ───────────────────────────────────────────────────

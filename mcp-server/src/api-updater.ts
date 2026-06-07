@@ -7,8 +7,16 @@ import { Readable } from "stream";
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const CDN_BASE = "https://cdn.sbox.game/releases/";
+// Blazor Server pre-renders the page only for known crawler UAs; a standard
+// browser UA returns an empty JS shell with no CDN URL visible in the HTML.
+export const SCHEMA_PAGE = "https://sbox.game/api/schema";
+export const CRAWLER_UA =
+  "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)";
 const TIMESTAMP_RE = /\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}/;
 const TIMESTAMP_RE_GLOBAL = /\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}/g;
+// More specific than TIMESTAMP_RE_GLOBAL — validates domain + path before extracting timestamp
+const CDN_URL_RE =
+  /https:\/\/cdn\.sbox\.game\/releases\/(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.zip\.json/g;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_CACHE_DIR = path.join(os.homedir(), ".sbox-claude", "api-cache");
 
@@ -76,7 +84,10 @@ export class ApiUpdater {
 
     let responseText: string;
     try {
-      const response = await this.fetchFn(CDN_BASE, { signal: controller.signal });
+      const response = await this.fetchFn(SCHEMA_PAGE, {
+        headers: { "User-Agent": CRAWLER_UA },
+        signal: controller.signal,
+      });
       if (!response.ok) return notAvailable;
       responseText = await response.text();
     } catch {
@@ -86,24 +97,36 @@ export class ApiUpdater {
       clearTimeout(timer);
     }
 
-    const matches = responseText.match(TIMESTAMP_RE_GLOBAL) ?? [];
-    if (matches.length === 0) return notAvailable;
+    const cdnUrlMatches = [...responseText.matchAll(CDN_URL_RE)];
+    if (cdnUrlMatches.length === 0) return notAvailable;
 
-    const latest = [...new Set(matches)].sort().at(-1)!;
-    const updateAvailable = currentTimestamp === undefined || latest > currentTimestamp;
+    // Pick the entry with the latest timestamp (capture group 1)
+    const latest = cdnUrlMatches.reduce((best, m) =>
+      m[1] > best[1] ? m : best
+    );
+    const latestTimestamp = latest[1];
+    const latestUrl = latest[0];
+    const updateAvailable = currentTimestamp === undefined || latestTimestamp > currentTimestamp;
 
     return {
       updateAvailable,
-      latestTimestamp: latest,
+      latestTimestamp,
       currentTimestamp,
-      downloadUrl: updateAvailable ? `${CDN_BASE}${latest}.zip.json` : undefined,
+      downloadUrl: updateAvailable ? latestUrl : undefined,
     };
   }
 
-  async downloadLatest(timestamp: string): Promise<string> {
+  async downloadLatest(url: string): Promise<string> {
+    if (!url.startsWith(CDN_BASE)) {
+      throw new Error(`Refused download from unexpected URL: ${url}`);
+    }
+    const timestamp = TIMESTAMP_RE.exec(url)?.[0];
+    if (!timestamp) {
+      throw new Error(`No timestamp found in download URL: ${url}`);
+    }
+
     await this.ensureCacheDir();
 
-    const url = `${CDN_BASE}${timestamp}.zip.json`;
     const finalPath = path.join(this.cacheDir, `${timestamp}.zip.json`);
     const tmpPath = `${finalPath}.tmp`;
 

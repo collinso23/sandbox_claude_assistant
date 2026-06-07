@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { ApiUpdater, FetchFn } from "../src/api-updater";
+import { ApiUpdater, FetchFn, CRAWLER_UA } from "../src/api-updater";
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -103,31 +103,40 @@ describe("ApiUpdater.getNewestCachedFile", () => {
 // ── checkForUpdate ────────────────────────────────────────────────────────
 
 describe("ApiUpdater.checkForUpdate", () => {
-  it("returns updateAvailable: true when CDN has a newer timestamp", async () => {
-    const u = new ApiUpdater({
-      fetch: mockFetch("2026-06-10-12-00-00.zip.json 2026-06-05-18-09-57.zip.json"),
-    });
+  it("returns updateAvailable: true when schema page HTML contains a newer CDN URL", async () => {
+    const html =
+      '<a href="https://cdn.sbox.game/releases/2026-06-10-12-00-00.zip.json">latest</a>' +
+      '<a href="https://cdn.sbox.game/releases/2026-06-05-18-09-57.zip.json">prev</a>';
+    const u = new ApiUpdater({ fetch: mockFetch(html) });
     const result = await u.checkForUpdate("2026-06-05-18-09-57");
     expect(result.updateAvailable).toBe(true);
     expect(result.latestTimestamp).toBe("2026-06-10-12-00-00");
-    expect(result.downloadUrl).toContain("2026-06-10-12-00-00.zip.json");
+    expect(result.downloadUrl).toBe(
+      "https://cdn.sbox.game/releases/2026-06-10-12-00-00.zip.json"
+    );
   });
 
-  it("returns updateAvailable: false when CDN timestamp matches current", async () => {
-    const u = new ApiUpdater({ fetch: mockFetch("2026-06-05-18-09-57.zip.json") });
+  it("returns updateAvailable: false when schema page CDN URL matches current", async () => {
+    const html =
+      '<a href="https://cdn.sbox.game/releases/2026-06-05-18-09-57.zip.json">download</a>';
+    const u = new ApiUpdater({ fetch: mockFetch(html) });
     const result = await u.checkForUpdate("2026-06-05-18-09-57");
     expect(result.updateAvailable).toBe(false);
     expect(result.downloadUrl).toBeUndefined();
   });
 
-  it("returns updateAvailable: false when CDN timestamp is older than current", async () => {
-    const u = new ApiUpdater({ fetch: mockFetch("2026-05-01-00-00-00.zip.json") });
+  it("returns updateAvailable: false when schema page CDN URL is older than current", async () => {
+    const html =
+      '<a href="https://cdn.sbox.game/releases/2026-05-01-00-00-00.zip.json">download</a>';
+    const u = new ApiUpdater({ fetch: mockFetch(html) });
     const result = await u.checkForUpdate("2026-06-05-18-09-57");
     expect(result.updateAvailable).toBe(false);
   });
 
   it("returns updateAvailable: true when no currentTimestamp is provided", async () => {
-    const u = new ApiUpdater({ fetch: mockFetch("2026-06-05-18-09-57.zip.json") });
+    const html =
+      '<a href="https://cdn.sbox.game/releases/2026-06-05-18-09-57.zip.json">download</a>';
+    const u = new ApiUpdater({ fetch: mockFetch(html) });
     const result = await u.checkForUpdate();
     expect(result.updateAvailable).toBe(true);
     expect(result.currentTimestamp).toBeUndefined();
@@ -140,14 +149,14 @@ describe("ApiUpdater.checkForUpdate", () => {
     expect(result.latestTimestamp).toBeUndefined();
   });
 
-  it("returns updateAvailable: false without throwing when CDN returns HTTP 500", async () => {
+  it("returns updateAvailable: false without throwing when schema page returns HTTP 500", async () => {
     const u = new ApiUpdater({ fetch: mockFetch("Internal Server Error", 500) });
     const result = await u.checkForUpdate("2026-06-05-18-09-57");
     expect(result.updateAvailable).toBe(false);
   });
 
-  it("returns updateAvailable: false when CDN response contains no timestamps", async () => {
-    const u = new ApiUpdater({ fetch: mockFetch("no timestamps here at all") });
+  it("returns updateAvailable: false when schema page HTML contains no CDN URLs", async () => {
+    const u = new ApiUpdater({ fetch: mockFetch("<html><body>Loading...</body></html>") });
     const result = await u.checkForUpdate("2026-06-05-18-09-57");
     expect(result.updateAvailable).toBe(false);
     expect(result.latestTimestamp).toBeUndefined();
@@ -158,6 +167,17 @@ describe("ApiUpdater.checkForUpdate", () => {
     const result = await u.checkForUpdate("2026-06-05-18-09-57");
     expect(result.updateAvailable).toBe(false);
     expect(result.latestTimestamp).toBeUndefined();
+  });
+
+  it("sends the crawler User-Agent header so Blazor pre-renders the page", async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+    const capturingFetch: FetchFn = (_input, init) => {
+      capturedHeaders = (init as RequestInit)?.headers as Record<string, string>;
+      return Promise.resolve(new Response("", { status: 200 }));
+    };
+    const u = new ApiUpdater({ fetch: capturingFetch });
+    await u.checkForUpdate();
+    expect(capturedHeaders?.["User-Agent"]).toBe(CRAWLER_UA);
   });
 });
 
@@ -206,12 +226,13 @@ describe("ApiUpdater.resolveApiPath", () => {
 
 describe("ApiUpdater.downloadLatest", () => {
   const TS = "2026-06-05-18-09-57";
+  const URL = `https://cdn.sbox.game/releases/${TS}.zip.json`;
   const CONTENT = JSON.stringify({ Types: [{ Name: "X", FullName: "X.X", Namespace: "X", Group: "class", Assembly: "x", IsPublic: true, DocId: "T:X.X" }] });
 
   it("writes file atomically and returns final path", async () => {
     const dir = makeTempDir();
     const u = new ApiUpdater({ cacheDir: dir, fetch: mockFetch(CONTENT) });
-    const returned = await u.downloadLatest(TS);
+    const returned = await u.downloadLatest(URL);
     const expected = path.join(dir, `${TS}.zip.json`);
     expect(returned).toBe(expected);
     expect(fs.existsSync(expected)).toBe(true);
@@ -221,21 +242,30 @@ describe("ApiUpdater.downloadLatest", () => {
   it("throws with URL and status when CDN returns non-OK status, leaves no .tmp", async () => {
     const dir = makeTempDir();
     const u = new ApiUpdater({ cacheDir: dir, fetch: mockFetch("Not Found", 404) });
-    await expect(u.downloadLatest(TS)).rejects.toThrow(/HTTP 404/);
+    await expect(u.downloadLatest(URL)).rejects.toThrow(/HTTP 404/);
     expect(fs.existsSync(path.join(dir, `${TS}.zip.json.tmp`))).toBe(false);
   });
 
   it("throws and leaves no .tmp when fetch throws", async () => {
     const dir = makeTempDir();
     const u = new ApiUpdater({ cacheDir: dir, fetch: throwingFetch("ECONNREFUSED") });
-    await expect(u.downloadLatest(TS)).rejects.toThrow();
+    await expect(u.downloadLatest(URL)).rejects.toThrow();
     expect(fs.existsSync(path.join(dir, `${TS}.zip.json.tmp`))).toBe(false);
   });
 
   it("throws and leaves no .tmp when fetch times out", async () => {
     const dir = makeTempDir();
     const u = new ApiUpdater({ cacheDir: dir, fetch: neverResolvingFetch(), timeoutMs: 50 });
-    await expect(u.downloadLatest(TS)).rejects.toThrow();
+    await expect(u.downloadLatest(URL)).rejects.toThrow();
+    expect(fs.existsSync(path.join(dir, `${TS}.zip.json.tmp`))).toBe(false);
+  });
+
+  it("throws immediately when URL is not from the expected CDN domain", async () => {
+    const dir = makeTempDir();
+    const u = new ApiUpdater({ cacheDir: dir });
+    await expect(
+      u.downloadLatest(`https://evil.example.com/releases/${TS}.zip.json`)
+    ).rejects.toThrow(/Refused download/);
     expect(fs.existsSync(path.join(dir, `${TS}.zip.json.tmp`))).toBe(false);
   });
 });
