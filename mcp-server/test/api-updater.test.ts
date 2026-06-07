@@ -169,6 +169,16 @@ describe("ApiUpdater.checkForUpdate", () => {
     expect(result.latestTimestamp).toBeUndefined();
   });
 
+  it("selects the newer timestamp when it appears second in the HTML (reduce truthy branch)", async () => {
+    const html =
+      '<a href="https://cdn.sbox.game/releases/2026-06-05-18-09-57.zip.json">prev</a>' +
+      '<a href="https://cdn.sbox.game/releases/2026-06-10-12-00-00.zip.json">latest</a>';
+    const u = new ApiUpdater({ fetch: mockFetch(html) });
+    const result = await u.checkForUpdate("2026-06-01-00-00-00");
+    expect(result.latestTimestamp).toBe("2026-06-10-12-00-00");
+    expect(result.updateAvailable).toBe(true);
+  });
+
   it("sends the crawler User-Agent header so Blazor pre-renders the page", async () => {
     let capturedHeaders: Record<string, string> | undefined;
     const capturingFetch: FetchFn = (_input, init) => {
@@ -267,6 +277,21 @@ describe("ApiUpdater.downloadLatest", () => {
       u.downloadLatest(`https://evil.example.com/releases/${TS}.zip.json`)
     ).rejects.toThrow(/Refused download/);
     expect(fs.existsSync(path.join(dir, `${TS}.zip.json.tmp`))).toBe(false);
+  });
+
+  it("throws when CDN URL has no timestamp segment", async () => {
+    const dir = makeTempDir();
+    const u = new ApiUpdater({ cacheDir: dir });
+    await expect(
+      u.downloadLatest("https://cdn.sbox.game/releases/notimestamp.zip.json")
+    ).rejects.toThrow(/No timestamp found in download URL/);
+  });
+
+  it("throws when download response has no body", async () => {
+    const dir = makeTempDir();
+    const noBodyFetch: FetchFn = async () => ({ ok: true, body: null, status: 200 } as unknown as Response);
+    const u = new ApiUpdater({ cacheDir: dir, fetch: noBodyFetch });
+    await expect(u.downloadLatest(URL)).rejects.toThrow(/returned no response body/);
   });
 });
 

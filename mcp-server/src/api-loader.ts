@@ -126,7 +126,6 @@ export class ApiLoader {
 
   private indexType(type: SboxType): void {
     const add = (token: string) => {
-      if (!token) return;
       const t = token.toLowerCase();
       let set = this.invertedIndex.get(t);
       if (!set) { set = new Set(); this.invertedIndex.set(t, set); }
@@ -176,11 +175,9 @@ export class ApiLoader {
           }
         }
       }
-      const results = matchSet
-        ? [...matchSet]
-            .map((fn) => this.types.get(fn))
-            .filter((t): t is SboxType => t !== undefined)
-        : [];
+      const results = [...matchSet!]
+        .map((fn) => this.types.get(fn))
+        .filter((t): t is SboxType => t !== undefined);
       return filter(results);
     }
 

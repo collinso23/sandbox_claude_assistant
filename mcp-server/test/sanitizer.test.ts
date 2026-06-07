@@ -144,3 +144,13 @@ describe("sanitizeDoc", () => {
     expect(result.Remarks).toBeUndefined();
   });
 });
+
+// ── Length truncation ──────────────────────────────────────────────────────
+
+describe("sanitize — length truncation", () => {
+  it("truncates a string exceeding MAX_DOC_LENGTH (2000) to exactly 2000 chars", () => {
+    const long = "a".repeat(2001);
+    const result = sanitize(long)!;
+    expect(result.length).toBe(2000);
+  });
+});

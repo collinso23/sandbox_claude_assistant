@@ -269,6 +269,16 @@ describe("ApiLoader — LRU integration", () => {
 
     expect(loader.cacheSize).toBe(2);
   });
+
+  it("getByFullName returns the cached result on a repeated call", async () => {
+    const loader = new ApiLoader();
+    await loader.load(FIXTURE_PATH);
+
+    const first = loader.getByFullName("Sandbox.Component");
+    const second = loader.getByFullName("Sandbox.Component"); // hits cache
+    expect(second).toBeDefined();
+    expect(second).toBe(first);
+  });
 });
 
 // ── ApiLoader — validation ────────────────────────────────────────────────
@@ -292,5 +302,23 @@ describe("ApiLoader — validation", () => {
   it("throws when root is an array instead of an object", async () => {
     const p = writeTempJson([]);
     await expect(new ApiLoader().load(p)).rejects.toThrow();
+  });
+
+  it("throws when root is null", async () => {
+    const p = writeTempRaw("null");
+    await expect(new ApiLoader().load(p)).rejects.toThrow(/root is not an object/);
+  });
+
+  it("throws when a Types array entry is not an object", async () => {
+    const p = writeTempRaw('{"Types":[null]}');
+    await expect(new ApiLoader().load(p)).rejects.toThrow(/type entry is not an object/);
+  });
+
+  it("loads successfully and indexes correctly when a FullName contains a double dot", async () => {
+    const minimalType = { Name: "Component", FullName: "Sandbox..Component", Namespace: "Sandbox", Group: "class", Assembly: "x", IsPublic: true, DocId: "T:Sandbox..Component" };
+    const p = writeTempJson({ Types: [minimalType] });
+    const loader = new ApiLoader();
+    await loader.load(p);
+    expect(loader.getByFullName("Sandbox..Component")).toBeDefined();
   });
 });

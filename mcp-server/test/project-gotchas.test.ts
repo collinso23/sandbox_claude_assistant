@@ -133,4 +133,14 @@ describe("loadProjectGotchas", () => {
     const results = await loadProjectGotchas(root);
     expect(results).toHaveLength(1);
   });
+
+  it("re-throws non-ENOENT file read errors without swallowing them", async () => {
+    const accessError = Object.assign(new Error("Permission denied"), { code: "EACCES" });
+    const spy = jest.spyOn(fs.promises, "readFile").mockRejectedValueOnce(accessError);
+    try {
+      await expect(loadProjectGotchas(makeProjectRoot())).rejects.toThrow("Permission denied");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
