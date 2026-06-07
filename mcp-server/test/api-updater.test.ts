@@ -21,6 +21,20 @@ function throwingFetch(message = "Network unreachable"): FetchFn {
   return () => Promise.reject(new Error(message));
 }
 
+function neverResolvingFetch(): FetchFn {
+  return (_input, init) =>
+    new Promise((_resolve, reject) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      if (signal?.aborted) {
+        reject(new DOMException("The operation was aborted", "AbortError"));
+        return;
+      }
+      signal?.addEventListener("abort", () =>
+        reject(new DOMException("The operation was aborted", "AbortError"))
+      );
+    });
+}
+
 afterAll(() => {
   for (const d of tmpDirs) {
     try { fs.rmSync(d, { recursive: true }); } catch {}
@@ -74,6 +88,16 @@ describe("ApiUpdater.getNewestCachedFile", () => {
     const u = new ApiUpdater({ cacheDir: dir });
     expect(u.getNewestCachedFile().timestamp).toBe("2026-06-05-18-09-57");
   });
+
+  it("ignores stale .tmp files even when their timestamp is newer", () => {
+    const dir = makeTempDir();
+    fs.writeFileSync(path.join(dir, "2026-06-01-10-00-00.zip.json"), "");
+    fs.writeFileSync(path.join(dir, "2026-06-10-00-00-00.zip.json.tmp"), "");
+    const u = new ApiUpdater({ cacheDir: dir });
+    const result = u.getNewestCachedFile();
+    expect(result.timestamp).toBe("2026-06-01-10-00-00");
+    expect(result.filePath).not.toContain(".tmp");
+  });
 });
 
 // ── checkForUpdate ────────────────────────────────────────────────────────
@@ -124,6 +148,13 @@ describe("ApiUpdater.checkForUpdate", () => {
 
   it("returns updateAvailable: false when CDN response contains no timestamps", async () => {
     const u = new ApiUpdater({ fetch: mockFetch("no timestamps here at all") });
+    const result = await u.checkForUpdate("2026-06-05-18-09-57");
+    expect(result.updateAvailable).toBe(false);
+    expect(result.latestTimestamp).toBeUndefined();
+  });
+
+  it("returns updateAvailable: false without throwing when fetch times out", async () => {
+    const u = new ApiUpdater({ fetch: neverResolvingFetch(), timeoutMs: 50 });
     const result = await u.checkForUpdate("2026-06-05-18-09-57");
     expect(result.updateAvailable).toBe(false);
     expect(result.latestTimestamp).toBeUndefined();
@@ -197,6 +228,13 @@ describe("ApiUpdater.downloadLatest", () => {
   it("throws and leaves no .tmp when fetch throws", async () => {
     const dir = makeTempDir();
     const u = new ApiUpdater({ cacheDir: dir, fetch: throwingFetch("ECONNREFUSED") });
+    await expect(u.downloadLatest(TS)).rejects.toThrow();
+    expect(fs.existsSync(path.join(dir, `${TS}.zip.json.tmp`))).toBe(false);
+  });
+
+  it("throws and leaves no .tmp when fetch times out", async () => {
+    const dir = makeTempDir();
+    const u = new ApiUpdater({ cacheDir: dir, fetch: neverResolvingFetch(), timeoutMs: 50 });
     await expect(u.downloadLatest(TS)).rejects.toThrow();
     expect(fs.existsSync(path.join(dir, `${TS}.zip.json.tmp`))).toBe(false);
   });

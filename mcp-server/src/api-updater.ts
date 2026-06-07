@@ -53,6 +53,7 @@ export class ApiUpdater {
     }
 
     const timestamped = entries
+      .filter((f) => f.endsWith(".zip.json"))
       .map((f) => ({ file: f, ts: TIMESTAMP_RE.exec(f)?.[0] }))
       .filter((e): e is { file: string; ts: string } => e.ts !== undefined)
       .sort((a, b) => b.ts.localeCompare(a.ts)); // newest first

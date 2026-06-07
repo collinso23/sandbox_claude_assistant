@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { ApiLoader } from "../../src/api-loader";
 import { ApiUpdater } from "../../src/api-updater";
@@ -87,6 +89,17 @@ describe("getApiInfo — fully loaded", () => {
   it("apiDate is undefined when fixture filename has no timestamp", () => {
     const result = getApiInfo({ loader, updater: makeUpdater(), updateAvailable: false, debugMode: false });
     expect(result.apiDate).toBeUndefined();
+  });
+
+  it("apiDate is populated when loader was loaded from a timestamped file", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "get-api-info-test-"));
+    const tsFile = path.join(tmpDir, "2026-06-05-18-09-57.zip.json");
+    fs.copyFileSync(FIXTURE_PATH, tsFile);
+    const tsLoader = new ApiLoader();
+    await tsLoader.load(tsFile);
+    const result = getApiInfo({ loader: tsLoader, updater: makeUpdater(), updateAvailable: false, debugMode: false });
+    expect(result.apiDate).toBe("2026-06-05-18-09-57");
+    fs.rmSync(tmpDir, { recursive: true });
   });
 
   it("namespaces array is populated and sorted alphabetically", () => {

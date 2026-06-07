@@ -114,6 +114,18 @@ describe("loadProjectGotchas", () => {
     await expect(loadProjectGotchas(root)).rejects.toThrow(/each entry must be an object/);
   });
 
+  it("throws when an entry in the array is null", async () => {
+    const root = makeProjectRoot();
+    writeGotchasFile(root, [MINIMAL_ENTRY, null]);
+    await expect(loadProjectGotchas(root)).rejects.toThrow(/each entry must be an object/);
+  });
+
+  it("throws when an entry in the array is a nested array", async () => {
+    const root = makeProjectRoot();
+    writeGotchasFile(root, [MINIMAL_ENTRY, []]);
+    await expect(loadProjectGotchas(root)).rejects.toThrow(/each entry must be an object/);
+  });
+
   it("resolves a relative project root path correctly", async () => {
     const root = makeProjectRoot();
     writeGotchasFile(root, [MINIMAL_ENTRY]);
