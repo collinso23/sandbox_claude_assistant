@@ -90,9 +90,17 @@ describe("PLATFORM_GOTCHAS — uniqueness", () => {
 // ── apiTypes cross-check ──────────────────────────────────────────────────
 
 describe("PLATFORM_GOTCHAS — apiTypes fixture cross-check", () => {
+  it("apiTypes, when present, is non-empty (omit the field rather than leaving it [])", () => {
+    for (const g of PLATFORM_GOTCHAS) {
+      if (g.apiTypes !== undefined) {
+        expect(g.apiTypes.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it("every apiTypes name exists in api.fixture.json", () => {
     for (const g of PLATFORM_GOTCHAS) {
-      if (!g.apiTypes || g.apiTypes.length === 0) continue;
+      if (!g.apiTypes) continue;
       for (const typeName of g.apiTypes) {
         expect(fixtureTypeNames.has(typeName)).toBe(true);
       }

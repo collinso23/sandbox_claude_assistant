@@ -10,6 +10,8 @@ const { ApiLoader } = require("../dist/api-loader");
 const { ApiUpdater } = require("../dist/api-updater");
 const { loadProjectGotchas } = require("../dist/project-gotchas");
 const { getApiInfo }        = require("../dist/tools/get-api-info");
+const { PLATFORM_GOTCHAS } = require("../dist/data/gotchas");
+const TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/;
 
 const FIXTURE = path.join(__dirname, "../test/fixtures/api.fixture.json");
 const GREEN = "\x1b[32m";
@@ -476,6 +478,106 @@ section("api-loader — loading fixture");
   withDebug.debugMode === true
     ? pass("debugMode: true passes through")
     : fail(`debugMode: ${withDebug.debugMode}`);
+
+  // ── platform-gotchas demo ──────────────────────────────────────────────────
+
+  section("platform-gotchas — data summary");
+  console.log(`  Total entries: ${PLATFORM_GOTCHAS.length}`);
+  const byTag = {};
+  for (const g of PLATFORM_GOTCHAS) {
+    for (const t of g.tags) byTag[t] = (byTag[t] ?? 0) + 1;
+  }
+  console.log(`  Tag distribution: ${Object.entries(byTag).sort((a,b) => b[1]-a[1]).map(([t,c]) => `${t}(${c})`).join(", ")}`);
+  const withApiTypes = PLATFORM_GOTCHAS.filter(g => g.apiTypes?.length);
+  console.log(`  Entries with apiTypes: ${withApiTypes.length} — [${withApiTypes.map(g => `${g.id}→[${g.apiTypes.join(",")}]`).join(", ")}]`);
+
+  section("platform-gotchas — required fields");
+  PLATFORM_GOTCHAS.length === 15
+    ? pass("count: 15")
+    : fail(`count: expected 15, got ${PLATFORM_GOTCHAS.length}`);
+
+  const ids = PLATFORM_GOTCHAS.map(g => g.id);
+  new Set(ids).size === ids.length
+    ? pass(`all ${ids.length} ids are unique`)
+    : fail(`duplicate ids found: ${ids.filter((id,i) => ids.indexOf(id) !== i)}`);
+
+  const textFields = ["id", "title", "wrongPattern", "wrongReason", "fix", "fixReason", "confirmedBy"];
+  for (const field of textFields) {
+    const empty = PLATFORM_GOTCHAS.filter(g => !g[field] || g[field].trim() === "");
+    empty.length === 0
+      ? pass(`all entries have non-empty ${field}`)
+      : fail(`empty ${field} in: ${empty.map(g => g.id).join(", ")}`);
+  }
+
+  section("platform-gotchas — source and confidence");
+  const nonPlatform = PLATFORM_GOTCHAS.filter(g => g.source !== "platform");
+  nonPlatform.length === 0
+    ? pass('all entries have source="platform"')
+    : fail(`wrong source in: ${nonPlatform.map(g => `${g.id}(${g.source})`).join(", ")}`);
+
+  const validConfidence = new Set(["single-source", "multi-source", "verified"]);
+  const badConf = PLATFORM_GOTCHAS.filter(g => !validConfidence.has(g.confidence));
+  badConf.length === 0
+    ? pass("all entries have valid confidence value")
+    : fail(`invalid confidence in: ${badConf.map(g => `${g.id}(${g.confidence})`).join(", ")}`);
+
+  section("platform-gotchas — timestamp format");
+  for (const field of ["confirmedVersion", "lastVerified"]) {
+    const bad = PLATFORM_GOTCHAS.filter(g => !TIMESTAMP_RE.test(g[field]));
+    bad.length === 0
+      ? pass(`all entries have valid ${field} timestamp format`)
+      : fail(`bad ${field} format in: ${bad.map(g => `${g.id}(${g[field]})`).join(", ")}`);
+  }
+
+  section("platform-gotchas — tags integrity");
+  const emptyTagEntry = PLATFORM_GOTCHAS.filter(g => g.tags.length === 0 || g.tags.some(t => t.trim() === ""));
+  emptyTagEntry.length === 0
+    ? pass("all entries have non-empty tag arrays with non-empty tag strings")
+    : fail(`empty/blank tags in: ${emptyTagEntry.map(g => g.id).join(", ")}`);
+
+  section("platform-gotchas — wrongPattern !== fix");
+  const samePattern = PLATFORM_GOTCHAS.filter(g => g.wrongPattern === g.fix);
+  samePattern.length === 0
+    ? pass("all entries have wrongPattern different from fix")
+    : fail(`wrongPattern === fix in: ${samePattern.map(g => g.id).join(", ")}`);
+
+  section("platform-gotchas — apiTypes cross-check");
+  const fixtureTypes = new Set(
+    JSON.parse(fs.readFileSync(FIXTURE, "utf8")).Types.map(t => t.Name)
+  );
+  // apiTypes: [] is flagged as a data quality issue (empty array defeats the purpose)
+  const emptyApiTypes = PLATFORM_GOTCHAS.filter(g => g.apiTypes !== undefined && g.apiTypes.length === 0);
+  emptyApiTypes.length === 0
+    ? pass("no entries have apiTypes: [] (empty array)")
+    : fail(`apiTypes: [] (should be omitted or non-empty) in: ${emptyApiTypes.map(g => g.id).join(", ")}`);
+
+  let apiTypesMismatch = false;
+  for (const g of PLATFORM_GOTCHAS) {
+    if (!g.apiTypes?.length) continue;
+    for (const name of g.apiTypes) {
+      if (!fixtureTypes.has(name)) {
+        fail(`"${name}" in ${g.id}.apiTypes not found in fixture`);
+        apiTypesMismatch = true;
+      }
+    }
+  }
+  if (!apiTypesMismatch) pass(`all apiTypes names exist in api.fixture.json`);
+
+  section("platform-gotchas — platform purity (all text fields)");
+  const casinoNames = ["EconomyManager", "ChipStack", "CasinoGame", "PlayerWallet"];
+  const allTextField = ["title", "wrongPattern", "wrongReason", "fix", "fixReason"];
+  const casinoLeak = PLATFORM_GOTCHAS.filter(g =>
+    allTextField.some(f => casinoNames.some(name => g[f]?.includes(name)))
+  );
+  casinoLeak.length === 0
+    ? pass("no casino-specific class names found in any text field")
+    : fail(`casino names found in: ${casinoLeak.map(g => g.id).join(", ")}`);
+
+  section("platform-gotchas — title uniqueness");
+  const titles = PLATFORM_GOTCHAS.map(g => g.title);
+  new Set(titles).size === titles.length
+    ? pass("all titles are unique")
+    : fail(`duplicate titles found: ${titles.filter((t,i) => titles.indexOf(t) !== i)}`);
 
   // Cleanup temp dirs
   for (const d of [tmpBase, cacheDir, dlDir, pgNoFile, pgEmpty, pgValid, pgOverride, pgBadJson, pgNotArray, pgBadEntry, pgNullEntry, pgArrayEntry]) {
