@@ -66,3 +66,19 @@ export interface SboxType {
 export interface ApiRoot {
   Types: SboxType[];
 }
+
+export interface Gotcha {
+  id: string;
+  title: string;
+  tags: string[];
+  wrongPattern: string;
+  wrongReason: string;
+  fix: string;
+  fixReason: string;
+  apiTypes?: string[];
+  confirmedVersion: string;
+  lastVerified: string;
+  confirmedBy: string;
+  confidence: "single-source" | "multi-source" | "verified";
+  source: "platform" | "project";
+}
