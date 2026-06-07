@@ -203,11 +203,11 @@ The s&box API schema is published by Facepunch at:
 ```
 https://cdn.sbox.game/releases/{timestamp}.zip.json
 ```
-The timestamp portion updates with each engine release (e.g., `2026-06-05-18-09-57`). There is no stable "latest" alias — the specific release URL must be discovered by checking for newer timestamps.
+The timestamp portion updates with each engine release (e.g., `2026-06-05-18-09-57`). There is no stable "latest" alias and no CDN directory listing — the current release URL is discovered by fetching `https://sbox.game/api/schema` with a crawler User-Agent, which triggers Blazor's server-side pre-rendering and surfaces the full CDN URL in the HTML response.
 
 The MCP server manages this through `api-updater.ts`:
 - **Local cache** (primary): `~/.sbox-claude/api-cache/{timestamp}.zip.json`. All indexing reads from local cache. Never hits the network for a cached version.
-- **Update check** (optional, online only): On startup, if online, compares the newest cached timestamp against the latest timestamp discoverable at the CDN. If a newer release exists, logs a notice and optionally downloads it to cache. Never blocks startup or degrades session.
+- **Update check** (optional, online only): On startup, if online, fetches `sbox.game/api/schema` to discover the latest CDN URL. If newer than the cached timestamp, logs a notice and optionally downloads it to cache. Never blocks startup or degrades session.
 - **Manual update**: `npx @sbox-claude/mcp-server --update` explicitly downloads the latest release to cache.
 - **`SBOX_API_JSON` env var**: If set, overrides the cache lookup and uses that specific file directly. Useful for pinning to a specific API version or using a locally exported file.
 
@@ -370,10 +370,12 @@ Scene editor serialization can overwrite component state set in code
 ```
 https://cdn.sbox.game/releases/{timestamp}.zip.json
 ```
-`{timestamp}` = release date-time string (e.g., `2026-06-05-18-09-57`). Updates with each engine release. No stable "latest" alias — newer releases have a larger timestamp value and can be detected by comparison.
+`{timestamp}` = release date-time string (e.g., `2026-06-05-18-09-57`). Updates with each engine release. No stable "latest" alias and no CDN directory listing.
+
+**Discovery:** `GET https://sbox.game/api/schema` with a Bingbot User-Agent. Blazor pre-renders the full page for crawler UAs, embedding the current CDN download URL in the HTML. A standard browser UA returns an empty JS shell with no URL. The discovered URL is used verbatim for downloads — never reconstructed from a hardcoded base.
 
 `api-updater.ts` responsibilities:
-- Parse and compare timestamps to determine newest available vs. newest cached
+- Discover the latest CDN URL from the schema page and compare its timestamp to the cached version
 - Download to local cache on `--update` or when user confirms an available update
 - Never auto-download without user awareness; log a notice, never silently replace
 
@@ -385,7 +387,7 @@ https://cdn.sbox.game/releases/{timestamp}.zip.json
 - `CLAUDE.md.template` instructs Claude: when `get_api_info` shows an outdated API, warn the user before using types that may have changed
 
 ### GitHub Action: `api-check.yml`
-Runs periodically. Fetches the CDN releases directory to detect new timestamps. If a newer release exists than what's in the repo's `api/` README, opens an issue with a checklist: download new schema, regenerate `SBOX_API_REFERENCE.md`, verify gotcha `apiTypes`, bump version.
+Runs periodically. Fetches `sbox.game/api/schema` with a crawler UA to detect new CDN timestamps. If a newer release exists than what's in the repo's `api/` README, opens an issue with a checklist: download new schema, regenerate `SBOX_API_REFERENCE.md`, verify gotcha `apiTypes`, bump version.
 
 ### Community Update Workflow
 1. File issue using "new-gotcha" or "pattern-bug" template
