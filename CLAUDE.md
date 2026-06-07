@@ -14,7 +14,7 @@ See `PLAN.md` for the current design, build order, and rationale. **`PLAN.md` is
 
 **One component at a time.** Write one file or tool, test it, confirm it passes its gate, commit, then proceed. Never batch-generate multiple files. See `PLAN.md` — Build Methodology for the gate format.
 
-The current build step is **step 10**: implement the `search_gotchas` tool and its tests.
+The current build step is **step 11**: implement the `search_sbox_api` tool and its tests.
 
 ## Key Design Decisions
 
