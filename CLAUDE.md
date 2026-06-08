@@ -14,7 +14,7 @@ See `PLAN.md` for the current design, build order, and rationale. **`PLAN.md` is
 
 **One component at a time.** Write one file or tool, test it, confirm it passes its gate, commit, then proceed. Never batch-generate multiple files. See `PLAN.md` — Build Methodology for the gate format.
 
-The current build step is **step 15**: write `generate-api-reference.ts`.
+The current build step is **step 16**: write `CLAUDE.md.template`.
 
 Before stating any conclusion about how a code path behaves, trace it completely — from the call site, through the function, to the outcome. Do not conclude at a function boundary. If a subagent or coverage tool produces a result that makes a problem disappear, verify it independently before acting on it.
 

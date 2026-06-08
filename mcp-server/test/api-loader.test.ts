@@ -262,6 +262,29 @@ describe("ApiLoader — namespaces", () => {
   });
 });
 
+// ── ApiLoader — getAllTypes ────────────────────────────────────────────────
+
+describe("ApiLoader — getAllTypes", () => {
+  let loader: ApiLoader;
+
+  beforeAll(async () => {
+    loader = new ApiLoader();
+    await loader.load(FIXTURE_PATH);
+  });
+
+  it("returns all 10 fixture types", () => {
+    const types = loader.getAllTypes();
+    expect(types).toHaveLength(10);
+  });
+
+  it("every entry has FullName and Name", () => {
+    for (const t of loader.getAllTypes()) {
+      expect(typeof t.FullName).toBe("string");
+      expect(typeof t.Name).toBe("string");
+    }
+  });
+});
+
 // ── ApiLoader — LRU integration ───────────────────────────────────────────
 
 describe("ApiLoader — LRU integration", () => {

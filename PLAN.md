@@ -120,6 +120,7 @@ sandbox-claude-assistant/
 │   │   ├── project-gotchas.ts      ← Loads optional .claude/gotchas.json from project root
 │   │   ├── sanitizer.ts            ← Strips prompt-injection patterns from doc strings
 │   │   ├── types.ts                ← TypeScript interfaces matching API JSON shape
+│   │   ├── generate-api-reference.ts ← Generates SBOX_API_REFERENCE.md; run: node dist/generate-api-reference.js
 │   │   ├── tools/
 │   │   │   ├── search-api.ts       ← search_sbox_api(query, namespace?, verbose?)
 │   │   │   ├── get-type.ts         ← get_sbox_type(typeName, verbose?)
@@ -141,7 +142,6 @@ sandbox-claude-assistant/
 │   └── dist/                       ← gitignored compiled output
 │
 ├── scripts/
-│   ├── generate-api-reference.ts   ← Reads local API JSON, outputs SBOX_API_REFERENCE.md
 │   ├── install.sh / install.ps1
 │   ├── uninstall.sh / uninstall.ps1
 │   └── export-api.sh               ← Helper for exporting API JSON from s&box devtools
@@ -380,7 +380,11 @@ https://cdn.sbox.game/releases/{timestamp}.zip.json
 - Never auto-download without user awareness; log a notice, never silently replace
 
 ### SBOX_API_REFERENCE.md Generation
-`scripts/generate-api-reference.ts` reads the local API JSON through the same loader, extracts commonly used types, and writes `templates/SBOX_API_REFERENCE.md` with an API date header. Committed to the repo. Regenerated (not hand-edited) whenever the local API JSON is updated.
+`mcp-server/src/generate-api-reference.ts` reads the local API JSON through the same loader and writes `templates/SBOX_API_REFERENCE.md` with an API date header. Located in `src/` (not repo root `scripts/`) because `tsconfig.json` only compiles `src/**/*`; a `.ts` file at the repo root would not compile without a separate build configuration.
+
+Run: `SBOX_API_JSON=<path> node mcp-server/dist/generate-api-reference.js [output-path]`
+
+Committed to the repo. Regenerated (not hand-edited) whenever the local API JSON is updated.
 
 ### Staleness Detection
 - `get_api_info` exposes `apiDate` and `updateAvailable` to Claude

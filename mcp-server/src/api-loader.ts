@@ -198,6 +198,10 @@ export class ApiLoader {
     return filter(results);
   }
 
+  getAllTypes(): SboxType[] {
+    return [...this.types.values()];
+  }
+
   getNamespaces(): Map<string, number> {
     if (this._namespacesCache) return this._namespacesCache;
     const ns = new Map<string, number>();
