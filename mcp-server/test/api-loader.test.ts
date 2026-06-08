@@ -254,6 +254,12 @@ describe("ApiLoader — namespaces", () => {
     expect(ns.get("Sandbox.Render")).toBe(1);  // Camera
     expect(ns.get("Sandbox.Test")).toBe(1);    // MaliciousDoc
   });
+
+  it("getNamespaces returns the same Map object on repeated calls (memoized)", () => {
+    const first = loader.getNamespaces();
+    const second = loader.getNamespaces();
+    expect(second).toBe(first);
+  });
 });
 
 // ── ApiLoader — LRU integration ───────────────────────────────────────────

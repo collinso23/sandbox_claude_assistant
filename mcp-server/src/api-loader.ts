@@ -92,6 +92,7 @@ export class ApiLoader {
   private _indexReady = false;
   private _typeCount = 0;
   private _apiDate: string | undefined;
+  private _namespacesCache: Map<string, number> | undefined;
 
   constructor(lruSize = 100) {
     this.cache = new LruCache<string, SboxType>(lruSize);
@@ -198,10 +199,12 @@ export class ApiLoader {
   }
 
   getNamespaces(): Map<string, number> {
+    if (this._namespacesCache) return this._namespacesCache;
     const ns = new Map<string, number>();
     for (const type of this.types.values()) {
       ns.set(type.Namespace, (ns.get(type.Namespace) ?? 0) + 1);
     }
+    this._namespacesCache = ns;
     return ns;
   }
 }
