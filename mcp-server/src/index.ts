@@ -72,10 +72,10 @@ const TOOL_DEFINITIONS = [
       properties: {
         query: {
           type: "string",
-          description: "Keyword or tag to search for (e.g. 'networking', 'rpc', 'physics'). Leave empty to list all gotchas.",
+          description: "Keyword or tag to search for (e.g. 'networking', 'rpc', 'physics'). Omit or pass an empty string to list all gotchas.",
         },
       },
-      required: ["query"],
+      required: [],
     },
   },
   {
@@ -95,7 +95,8 @@ async function main(): Promise<void> {
   if (args.includes("--update")) {
     const { ApiUpdater } = await import("./api-updater");
     const updater = new ApiUpdater();
-    const { downloadUrl } = await updater.checkForUpdate();
+    const { timestamp: currentTimestamp } = updater.getNewestCachedFile();
+    const { downloadUrl } = await updater.checkForUpdate(currentTimestamp);
     if (!downloadUrl) {
       console.log("Already up to date.");
       return;
