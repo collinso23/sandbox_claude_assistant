@@ -11,7 +11,13 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@modelcontextprotocol/sdk/server": ["node_modules/@modelcontextprotocol/sdk/dist/esm/server/index"],
+      "@modelcontextprotocol/sdk/server/stdio": ["node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio"],
+      "@modelcontextprotocol/sdk/types": ["node_modules/@modelcontextprotocol/sdk/dist/esm/types"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test"]
