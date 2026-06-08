@@ -514,21 +514,27 @@ Ask — not tick — each of the following against the file just written:
 | Observability | Errors identify source and bad value; state is inspectable for tests; debug mode logs useful metadata |
 | Resource Lifecycle | Memory is bounded; file/network handles closed; test temp files cleaned up; background timers injectable not auto-started |
 
-The methodology gate is a prompt for discussion, not a mandatory checkbox list. Use it to ask: "which of these did I not think about?" The full 81-point reference lives in conversation history and can be used for post-implementation audits.
+The methodology gate is a self-interrogation tool. For each category, construct a specific scenario in which this file could fail that test — then examine whether the code handles it. If you cannot construct a failure scenario, you must either state the invariant that makes it provably safe, or conclude you have not thought hard enough. "I don't see a problem" is not a cleared category. A category is cleared only when you can name the protection or name the gap.
 
 **Coverage verification (required before every commit):**
 Run `npm test -- --coverage` and read the branch/function report. Coverage is not the goal — uncovered branches are test cases you forgot to write. A step is not complete until every branch is reachable.
 
 **Three coverage gaps that appear repeatedly — check these explicitly:**
 
-1. **Sort comparator dead code.** If every test returns ≤1 result, `.sort((a,b) => ...)` is never invoked. For any ranking/sort implementation, write a synthetic test with exactly two controlled inputs of known different scores and assert which comes first.
+1. **Comparator and reducer dead code.** If every test returns ≤1 result, `.sort((a,b) => ...)` is never invoked. The same applies to `.reduce((best, m) => condition ? m : best)` — if only one element is ever present, the callback never runs. For any ranking, sort, or reduction, write a synthetic test with exactly two controlled inputs of known relative order and assert which wins. Both the truthy and falsy branches of any `condition ? a : b` comparator must be exercised independently.
 
 2. **Optional array: absent vs. present-but-empty.** `!field` is true on both `undefined` and `[]`. When an optional array field has a non-empty invariant (e.g. `apiTypes`), write two separate tests: one where the field is absent (`undefined`) and one where it is present but empty (`[]`). Both states must be handled correctly.
 
 3. **All parallel member arrays.** When a data shape has multiple parallel member arrays (e.g. `Methods`, `Properties`, `Fields`, `Constructors` on `SboxType`), test each one independently. Testing only Methods and Properties leaves Fields and Constructors as dead code.
 
+4. **Dead guard audit.** For each guard or null-check in the file just written, trace backward to every caller and ask: can any caller actually violate the assumption this guard protects? If no caller can, the guard is dead code — remove it rather than writing a test for it. The coverage gap is the signal; the fix is removal, not a test. Pay particular attention to guards inside private helpers whose only callers already enforce the invariant upstream.
+
 **External assumptions rule:**
 Any URL, file path, or network contract that the code depends on must be either (a) tested against a real endpoint before encoding, or (b) explicitly marked in the step's plan as "assumption: verify manually before step N." The CDN discovery mechanism (`sbox.game/api/schema` + crawler UA) is the archetype of an assumption that silently shaped an entire module before being tested.
+
+**Build history note:** Steps 1–8 were completed before the current methodology gate was fully established. Coverage gaps found in those steps during later sessions were expected and are now closed. The gate applies in full from step 9 onward.
+
+**`scripts/demo.js`** is a build smoke test — one check per compiled module to verify `dist/` loads and core paths work. All correctness, edge-case, and error-path coverage belongs exclusively in `npm test`. Do not expand it beyond one assertion per module.
 
 ---
 

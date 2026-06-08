@@ -16,6 +16,8 @@ See `PLAN.md` for the current design, build order, and rationale. **`PLAN.md` is
 
 The current build step is **step 12**: implement the `get_sbox_type` tool and its tests.
 
+Before stating any conclusion about how a code path behaves, trace it completely — from the call site, through the function, to the outcome. Do not conclude at a function boundary. If a subagent or coverage tool produces a result that makes a problem disappear, verify it independently before acting on it.
+
 ## Key Design Decisions
 
 - **Offline-first** — all core features work without network; CDN check is optional background-only
@@ -36,3 +38,5 @@ npm run build                # compile TypeScript → dist/
 npx . --update               # download latest API schema from CDN
 npx . --debug                # start server with debug logging
 ```
+
+`scripts/demo.js` — build smoke test only; run via `node scripts/demo.js` after `npm run build`. Verifies `dist/` loads; not a substitute for `npm test`.
