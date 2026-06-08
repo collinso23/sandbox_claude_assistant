@@ -8,6 +8,7 @@ import {
 import * as os from "os";
 import * as path from "path";
 import { initialize, handleToolCall, runBackgroundCheck } from "./server";
+import { ApiUpdater } from "./api-updater";
 
 const DEFAULT_LOG_PATH = path.join(os.homedir(), ".sbox-claude", "debug.log");
 
@@ -89,21 +90,24 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
+export async function runUpdate(updater: ApiUpdater): Promise<void> {
+  const { timestamp: currentTimestamp } = updater.getNewestCachedFile();
+  const { downloadUrl } = await updater.checkForUpdate(currentTimestamp);
+  if (!downloadUrl) {
+    console.log("Already up to date.");
+    return;
+  }
+  await updater.ensureCacheDir();
+  const saved = await updater.downloadLatest(downloadUrl);
+  console.log(`Downloaded: ${saved}`);
+}
+
+/* istanbul ignore next */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.includes("--update")) {
-    const { ApiUpdater } = await import("./api-updater");
-    const updater = new ApiUpdater();
-    const { timestamp: currentTimestamp } = updater.getNewestCachedFile();
-    const { downloadUrl } = await updater.checkForUpdate(currentTimestamp);
-    if (!downloadUrl) {
-      console.log("Already up to date.");
-      return;
-    }
-    await updater.ensureCacheDir();
-    const saved = await updater.downloadLatest(downloadUrl);
-    console.log(`Downloaded: ${saved}`);
+    await runUpdate(new ApiUpdater());
     return;
   }
 
@@ -142,7 +146,10 @@ async function main(): Promise<void> {
   await server.connect(new StdioServerTransport());
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+/* istanbul ignore next */
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

@@ -299,6 +299,146 @@ describe("handleToolCall — per tool, valid loader", () => {
   });
 });
 
+// ── handleToolCall — disambiguation (Scenario 1) ─────────────────────────
+
+describe("handleToolCall — get_sbox_type disambiguation", () => {
+  let state: ServerState;
+
+  beforeAll(async () => {
+    const loader = new ApiLoader();
+    await loader.load(FIXTURE_PATH);
+    state = {
+      loader,
+      updater: new ApiUpdater({ cacheDir: makeTempDir() }),
+      debugMode: false,
+      projectGotchas: [],
+    };
+  });
+
+  it("returns {types, note} when multiple types share a short name", async () => {
+    const result = await handleToolCall("get_sbox_type", { name: "Camera" }, state, false);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(Array.isArray(parsed.types)).toBe(true);
+    expect(parsed.types).toHaveLength(2);
+    expect(typeof parsed.note).toBe("string");
+    expect(parsed.note.toLowerCase()).toContain("full name");
+  });
+});
+
+// ── handleToolCall — verbose mode (Scenario 4) ───────────────────────────
+
+describe("handleToolCall — verbose mode", () => {
+  let state: ServerState;
+
+  beforeAll(async () => {
+    const loader = new ApiLoader();
+    await loader.load(FIXTURE_PATH);
+    state = {
+      loader,
+      updater: new ApiUpdater({ cacheDir: makeTempDir() }),
+      debugMode: false,
+      projectGotchas: [],
+    };
+  });
+
+  it("get_sbox_type verbose:true returns Documentation.Remarks; verbose:false does not", async () => {
+    const normal = await handleToolCall("get_sbox_type", { name: "Component", verbose: false }, state, false);
+    const verbose = await handleToolCall("get_sbox_type", { name: "Component", verbose: true }, state, false);
+    const parsedNormal = JSON.parse(normal.content[0].text);
+    const parsedVerbose = JSON.parse(verbose.content[0].text);
+    expect(parsedNormal.type.Documentation?.Remarks).toBeUndefined();
+    expect(typeof parsedVerbose.type.Documentation?.Remarks).toBe("string");
+  });
+
+  it("search_sbox_api verbose:true includes Documentation on returned types", async () => {
+    const result = await handleToolCall("search_sbox_api", { query: "WorldPanel", verbose: true }, state, false);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed[0].Documentation?.Remarks).toBeDefined();
+  });
+
+  it("search_sbox_api verbose:false does not include Remarks on returned types", async () => {
+    const result = await handleToolCall("search_sbox_api", { query: "WorldPanel", verbose: false }, state, false);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed[0].Documentation?.Remarks).toBeUndefined();
+  });
+});
+
+// ── handleToolCall — degraded mode completeness (Scenario 5) ─────────────
+
+describe("handleToolCall — degraded mode completeness", () => {
+  const degradedState: ServerState = {
+    loader: undefined,
+    updater: new ApiUpdater({ cacheDir: os.tmpdir() }),
+    debugMode: false,
+    projectGotchas: [],
+  };
+
+  it("get_sbox_type returns warning JSON when loader is absent", async () => {
+    const result = await handleToolCall("get_sbox_type", { name: "Component" }, degradedState, false);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toHaveProperty("warning");
+    expect(parsed).toHaveProperty("result", null);
+  });
+
+  it("list_namespaces returns warning JSON when loader is absent", async () => {
+    const result = await handleToolCall("list_namespaces", {}, degradedState, false);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toHaveProperty("warning");
+    expect(parsed).toHaveProperty("result", null);
+  });
+
+  it("get_api_info returns degraded:true and loaded:false when loader is absent", async () => {
+    const result = await handleToolCall("get_api_info", {}, degradedState, false);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toHaveProperty("degraded", true);
+    expect(parsed).toHaveProperty("loaded", false);
+  });
+});
+
+// ── handleToolCall — project gotchas end-to-end (Scenario 6) ─────────────
+
+describe("handleToolCall — project gotchas end-to-end", () => {
+  it("search_gotchas returns project-tagged entries when .claude/gotchas.json exists", async () => {
+    const projectRoot = makeTempDir();
+    const claudeDir = path.join(projectRoot, ".claude");
+    fs.mkdirSync(claudeDir);
+    const projectGotcha = {
+      id: "my-project-gotcha",
+      title: "Always call InitManager before registering items",
+      tags: ["architecture"],
+      wrongPattern: "RegisterItem(item);",
+      wrongReason: "InitManager not ready yet",
+      fix: "InitManager.Init(); RegisterItem(item);",
+      fixReason: "Ensures the manager is ready",
+      confirmedVersion: "2026-06-01-00-00-00",
+      lastVerified: "2026-06-01-00-00-00",
+      confirmedBy: "test",
+      confidence: "single-source",
+      source: "project",
+    };
+    fs.writeFileSync(
+      path.join(claudeDir, "gotchas.json"),
+      JSON.stringify([projectGotcha]),
+      "utf8"
+    );
+
+    process.env["SBOX_API_JSON"] = FIXTURE_PATH;
+    const state = await initialize({
+      args: [],
+      projectRoot,
+      stderr: { write: jest.fn() },
+    });
+
+    const result = await handleToolCall("search_gotchas", { query: "" }, state, false);
+    const parsed = JSON.parse(result.content[0].text);
+
+    const projectEntry = parsed.find((g: { source: string }) => g.source === "project");
+    expect(projectEntry).toBeDefined();
+    expect(projectEntry.id).toBe("my-project-gotcha");
+    expect(projectEntry.title).toBe("Always call InitManager before registering items");
+  });
+});
+
 // ── handleToolCall — unknown tool ─────────────────────────────────────────
 
 describe("handleToolCall — unknown tool", () => {
