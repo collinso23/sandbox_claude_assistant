@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { ApiUpdater } from "../src/api-updater";
-import { runUpdate } from "../src/index";
+import { runUpdate, TOOL_DEFINITIONS } from "../src/index";
 
 // ── Temp helpers ──────────────────────────────────────────────────────────
 
@@ -19,6 +19,57 @@ function makeTempDir(): string {
   tmpPaths.push(p);
   return p;
 }
+
+// ── TOOL_DEFINITIONS — schema correctness ────────────────────────────────
+
+describe("TOOL_DEFINITIONS — schema correctness", () => {
+  const EXPECTED_NAMES = [
+    "search_sbox_api",
+    "get_sbox_type",
+    "list_namespaces",
+    "search_gotchas",
+    "get_api_info",
+  ];
+
+  it("defines exactly 5 tools", () => {
+    expect(TOOL_DEFINITIONS).toHaveLength(5);
+  });
+
+  it("contains all expected tool names", () => {
+    const names = TOOL_DEFINITIONS.map((t) => t.name);
+    for (const expected of EXPECTED_NAMES) {
+      expect(names).toContain(expected);
+    }
+  });
+
+  it("every tool has a non-empty description", () => {
+    for (const tool of TOOL_DEFINITIONS) {
+      expect(tool.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("every tool inputSchema has type 'object' and a properties key", () => {
+    for (const tool of TOOL_DEFINITIONS) {
+      expect(tool.inputSchema.type).toBe("object");
+      expect(tool.inputSchema).toHaveProperty("properties");
+    }
+  });
+
+  it("search_sbox_api and get_sbox_type have the expected required fields", () => {
+    const searchApi = TOOL_DEFINITIONS.find((t) => t.name === "search_sbox_api")!;
+    const getSboxType = TOOL_DEFINITIONS.find((t) => t.name === "get_sbox_type")!;
+    expect(searchApi.inputSchema.required).toEqual(["query"]);
+    expect(getSboxType.inputSchema.required).toEqual(["name"]);
+  });
+
+  it("list_namespaces, search_gotchas, get_api_info have empty required arrays", () => {
+    const noArgTools = ["list_namespaces", "search_gotchas", "get_api_info"];
+    for (const toolName of noArgTools) {
+      const tool = TOOL_DEFINITIONS.find((t) => t.name === toolName)!;
+      expect(tool.inputSchema.required).toEqual([]);
+    }
+  });
+});
 
 // ── runUpdate — cached timestamp regression (Scenario 8) ─────────────────
 

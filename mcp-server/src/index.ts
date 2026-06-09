@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
-} from "@modelcontextprotocol/sdk/types";
+} from "@modelcontextprotocol/sdk/types.js";
 import * as os from "os";
 import * as path from "path";
 import { initialize, handleToolCall, runBackgroundCheck } from "./server";
@@ -12,7 +12,7 @@ import { ApiUpdater } from "./api-updater";
 
 const DEFAULT_LOG_PATH = path.join(os.homedir(), ".sbox-claude", "debug.log");
 
-const TOOL_DEFINITIONS = [
+export const TOOL_DEFINITIONS = [
   {
     name: "search_sbox_api",
     description:
@@ -62,6 +62,7 @@ const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object" as const,
       properties: {},
+      required: [],
     },
   },
   {
@@ -86,6 +87,7 @@ const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object" as const,
       properties: {},
+      required: [],
     },
   },
 ];

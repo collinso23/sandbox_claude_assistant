@@ -15,8 +15,8 @@
     "baseUrl": ".",
     "paths": {
       "@modelcontextprotocol/sdk/server": ["node_modules/@modelcontextprotocol/sdk/dist/esm/server/index"],
-      "@modelcontextprotocol/sdk/server/stdio": ["node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio"],
-      "@modelcontextprotocol/sdk/types": ["node_modules/@modelcontextprotocol/sdk/dist/esm/types"]
+      "@modelcontextprotocol/sdk/server/stdio.js": ["node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio"],
+      "@modelcontextprotocol/sdk/types.js": ["node_modules/@modelcontextprotocol/sdk/dist/esm/types"]
     }
   },
   "include": ["src/**/*"],

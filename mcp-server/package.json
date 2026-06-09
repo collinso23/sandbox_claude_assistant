@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
+    "test:e2e": "npm run build && jest --config jest.e2e.config.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": ["sbox", "mcp", "claude", "game-dev", "facepunch"],
@@ -27,6 +28,7 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "testMatch": ["**/test/**/*.test.ts"],
+    "testPathIgnorePatterns": ["test/e2e/"],
     "transform": {
       "^.+\\.ts$": ["ts-jest", { "tsconfig": { "rootDir": "." } }]
     }
