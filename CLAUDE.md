@@ -35,8 +35,11 @@ npm install                  # install deps
 npm test                     # run Jest tests against api.fixture.json
 npm test -- --coverage       # run tests + branch coverage report (uncovered branches = missing tests)
 npm run build                # compile TypeScript → dist/
+npm run test:e2e             # build + spawn real server + verify MCP wire protocol (tools/list + tools/call)
 npx . --update               # download latest API schema from CDN
 npx . --debug                # start server with debug logging
 ```
 
 `scripts/demo.js` — build smoke test only; run via `node scripts/demo.js` after `npm run build`. Verifies `dist/` loads; not a substitute for `npm test`.
+
+**Gate note:** any step that produces a runnable binary must verify `npm run test:e2e` passes before marking complete. `npm test` alone does not verify the compiled server starts or that the MCP wire protocol works.

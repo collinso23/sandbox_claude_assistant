@@ -129,11 +129,16 @@ sandbox-claude-assistant/
 │   │   │   └── get-api-info.ts     ← get_api_info()
 │   │   └── data/
 │   │       └── gotchas.ts          ← Platform gotcha database; no API JSON dependency
+│   ├── jest.e2e.config.js           ← Separate Jest config for subprocess tests (excluded from npm test)
 │   ├── test/
 │   │   ├── fixtures/
 │   │   │   └── api.fixture.json    ← Synthetic test fixture (see Test Fixture Specification)
+│   │   ├── e2e/
+│   │   │   └── subprocess.test.ts  ← Spawns node dist/index.js; verifies tools/list + tools/call wire protocol
 │   │   ├── api-loader.test.ts
 │   │   ├── sanitizer.test.ts
+│   │   ├── server.test.ts
+│   │   ├── index.test.ts           ← TOOL_DEFINITIONS schema tests + runUpdate regression
 │   │   ├── search-api.test.ts
 │   │   ├── get-type.test.ts
 │   │   ├── list-namespaces.test.ts
@@ -226,6 +231,9 @@ All tool parameters validated before processing: string length bounds, no null b
 
 **npm supply chain:**
 Minimal dependencies — only `@modelcontextprotocol/sdk`. `package-lock.json` committed. Releases use npm provenance signing.
+
+**Node.js 24 SDK import compatibility:**
+`@modelcontextprotocol/sdk` uses a wildcard package export `"./dist/cjs/*"` (without `.js` extension) which fails on Node.js 24's strict exports resolution. The SDK expects explicit `.js` extensions in import specifiers (`server/stdio.js`, `types.js`). All SDK imports in `index.ts` use explicit extensions; `tsconfig.json` paths are updated to match. The unit tests were unaffected (ts-jest resolves via tsconfig paths, not Node exports); the subprocess test was the only way to discover this.
 
 ### Performance
 
@@ -585,6 +593,10 @@ Each item is one step. Do not proceed until the current step passes its gate.
 
 15. **Write `generate-api-reference.ts`** script. Gate: valid Markdown output with API date header; deterministic (same input → identical output on two runs).
     Focus: Resource Lifecycle (write to temp file then atomic rename — output file is never in a truncated/partial state), Boundary (types with no docs render cleanly; empty namespace is skipped gracefully), Interface (output is deterministic — types sorted by FullName), Behavioral gate: run the script against the fixture and diff two consecutive outputs — they must be identical
+
+15.5-A. **Export `TOOL_DEFINITIONS` + schema unit tests** — `index.ts` exports the constant; `index.test.ts` asserts 5 tools, correct names, non-empty descriptions, `type: "object"` inputSchema, correct `required` arrays for all tools. Caught: `list_namespaces` and `get_api_info` were missing `required: []`. ✓ Done.
+
+15.5-B. **Subprocess MCP wiring test** (`npm run test:e2e`) — spawns `node dist/index.js` with `SBOX_API_JSON` pointing at fixture; completes MCP initialization handshake; verifies `tools/list` returns 5 tools; verifies `tools/call get_api_info` returns valid content response. Lives in `test/e2e/` with separate `jest.e2e.config.js` so `npm test` stays offline and fast. Caught: Node.js 24 SDK import resolution failure — server was completely broken in production until this step. ✓ Done.
 
 16. **Write `CLAUDE.md.template`**. Gate: fresh session orients correctly; avoids Unity APIs; asks verbose/normal before building.
     Focus: Security (placeholder substitution must not allow injection through user-supplied values), Boundary (placeholder values with special characters, spaces, or path separators), Behavioral gate: load in a Claude session; verify the specific responses named in the gate — `tsc --noEmit` alone is not sufficient
