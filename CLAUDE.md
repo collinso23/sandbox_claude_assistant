@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **Prompt templates** (`templates/`) — Markdown files developers copy into their s&box project
 2. **MCP server** (`mcp-server/`) — TypeScript/Node.js server exposing s&box API search and a curated gotcha database
 
-See `PLAN.md` for the current design, build order, and rationale. **`PLAN.md` is a living document not a source of truth.** Update it when reality diverges from what was assumed. The code and tests are authoritative; the plan tracks intent.
+See `DESIGN.md` for architecture, constraints, and design rationale. See `PLAN.md` for current build state and step order. Both are living documents — update them when reality diverges. The code and tests are authoritative.
 
 ## Build Rules
 
